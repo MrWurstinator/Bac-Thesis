@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<style>
+    *{
+        font-family: "Helvetica Condensed Black",sans-serif;
+        box-sizing: border-box;
+    }
+    #legend {
+        position: relative;
+        /*float: right;*/
+        top: 30px;
+        /*margin-right: 20px;*/
+        /*margin-bottom: -60px;*/
+        flex-grow: 1;
+        order: 2;
+    }
+
+</style>
+<head>
+    <meta charset="UTF-8">
+    <title>Graphs</title>
+</head>
+<body>
+<!-- include d3 -->
+<script src="https://d3js.org/d3.v4.min.js"></script>
+
+<!-- include jQueryUI -->
+<script src="https://code.jquery.com/jquery-1.12.4.js"></script>
+<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+
+<div class="aflex" id="vis">
+
+    <h2 style="float:left;">Anonymity Bounds</h2>
+    <div id="li" style="float: left; display: flex; order: 1;">
+        <div id="legend"></div>
+    </div>
+
+    <h2 id="network_bubble_title" style="float: left;">Network Bubble</h2>
+    <div id="bu"></div>
+</div>
+<script>
+    let current_year = "2012";
+    let current_date = "-1";
+    //return "network_json/network_" + current_year + ".json"
+    let dataLoc = function(){return "network_json/network_quantile_small" + current_year + ".json"}; // "../network_json/network_2012.json";// "network_complete.json"; "network_1_month.json";
+    let anonLoc = "daily-mean-anon.csv";
+    let vis_div = document.getElementById("vis");
+    let axisSpace = {top: 0, right: 30, bottom: 20, left: 10},
+        widthLI = vis_div.clientWidth,
+        heightLI = 400,
+        heightBU = 1200,
+        legendSize = 310,
+        widthBU = vis_div.clientWidth;
+    let bubbleDataPack;
+    let bubbleDataRoot;
+
+    // line chart coordinates SVG container
+    let svgLI = d3.select("#li")
+        .append("svg")
+        .attr("width", widthLI)
+        .attr("height", heightLI)
+        // .style("float", "left")
+    ;
+
+    // bubble chart SVG container and axes
+    let svgBU = d3.select("#bu").append("svg")
+        .attr("width", widthBU)
+        .attr("height", heightBU);
+
+    let line = svgLI.append("g")
+        .attr("class", "line");
+    let networkBubbleTitle = d3.select("#network_bubble_title");
+    let bubble = svgBU
+            .attr("class", "bubble2");
+
+    let legendDiv = d3.select("#legend");
+
+    let detailDivBackground = d3.select("body").append("div")
+        // .style("opacity", 0)
+        .style("position", "absolute")
+        .style("border", "2px solid")
+        .style("border-color", "rgba(0, 0, 0, 0)")
+        .style("background-color", "rgba(255, 255, 255, 0)")
+        // .style("padding", "5px")
+        .style("border-radius", "6px");
+
+    let details = ["", ""];
+    let detailDivForeground = detailDivBackground.append("ul")
+        .style("opacity", 0)
+        .style("font-size", "130%")
+        .style("margin-top", "12.4px")
+        .style("margin-bottom", "12.4px")
+        .style("padding-left", "30px");
+
+    detailDivForeground.selectAll("li")
+        .data(details)
+        .enter()
+        .append("li")
+        .text(String);
+
+
+    let liXAxis, liYAxis;
+
+    let holdValue = false;
+
+    d3.json(dataLoc(), function (data) {
+    // $.getJSON(dataLoc(), function (data) {
+        d3.csv(anonLoc, function (anonData) {
+            //get column headers
+            let dimensions = anonData.columns.splice(1);
+
+            let lineIsVisible = {};
+            dimensions.forEach(function (d) {
+                lineIsVisible[d] = true;
+            });
+
+            //format data
+            anonData.forEach(function (d) {
+                dimensions.forEach(function (dim) {
+                    d[dim] = +d[dim];
+                });
+                d.Date = new Date(d.Date);
+            });
+
+            //Line chart-----------------------------------------------------------------------------------------
+            let dimension_color = d3.scaleOrdinal(d3.schemeCategory20);
+
+            let xScale = d3.scaleTime()
+                .domain([anonData[0].Date, anonData[anonData.length-1].Date])
+                .range([axisSpace.right, widthLI - 1]);
+            let xScale2 = d3.scaleTime()
+                .domain([anonData[0].Date, anonData[anonData.length-1].Date])
+                .range([axisSpace.right, widthLI - 1]);
+
+            let yScale = d3.scaleLinear()
+                .domain([1, 0])
+                .range([axisSpace.bottom, heightLI - (axisSpace.top + axisSpace.bottom)]);
+
+            let xAxis = d3.axisBottom(xScale);
+            let yAxis = d3.axisLeft(yScale);
+
+            let lineSA = d3.line()
+                .defined(d => d.y)
+                .x(d => xScale(d.x))
+                .y(d => yScale(d.y));
+
+            function li(dat) {
+                let oneLine = anonData.map(function (d) {
+                    return {x: d["Date"], y:d[dat]}
+                });
+                return lineSA(oneLine);
+            }
+
+            line = line
+                .selectAll("path")
+                .data(dimensions)
+                .enter()
+                .append("path")
+                .style("stroke", dimension_color)
+                .style("fill", "none")
+                .style("stroke-width", "2")
+                .attr("d", li);
+            liYAxis = svgLI
+                .append("g")
+                .attr("class", "axis")
+                .attr("transform", "translate("+ axisSpace.right +",0)")
+                .call(yAxis);
+
+            liXAxis = svgLI
+                .append("g")
+                .attr("class", "axis")
+                .attr("transform", "translate(0,"+(heightLI - axisSpace.bottom)+")")
+                .call(xAxis);
+
+            legendDiv = legendDiv.append("ul")
+                .style("margin", "0px")
+                .style("list-style", "none")
+                .selectAll("li")
+                .data(dimensions)
+                .enter()
+                .append("li")
+                .style("color", dimension_color)
+            ;
+            legendDiv.append("input")
+                .attr("type", "checkbox")
+                .attr("checked", "true")
+                .attr("id", String)
+                .attr("value", String)
+                .on("click", toggleLine)
+            ;
+
+            legendDiv.append("label")
+                .attr("for", String)
+                .attr("value", String)
+                .text(String);
+
+            let zoom_handle = d3.zoom()
+                .on("zoom", zoom_function);
+
+            // Register callbacks for line graph
+            svgLI
+                .call(zoom_handle)
+                .on("dblclick.zoom", null)
+                .on("mousemove", showAnonValues_orderBubbleGraph)
+                .on("dblclick", showAnonValues_orderBubbleGraph);
+
+            // Bubble chart------------------------------------------------------------------------------------
+            let circle_size = d3.scaleLinear()
+                .domain([0,310672458.75])
+                .range([0.004, 30]);
+            // let bd = data.filter(elem => elem.date === "2012-01-01");
+            let pack = d3.pack()
+                .size([widthBU, heightBU]);
+            makeBubbleGraph("2012-01-01");
+            update();
+
+            // Updates scaling of axes and sizes of graph elements to fit window size
+            function update() {
+                let widthLI = vis_div.clientWidth - axisSpace.right - legendSize,
+                    widthBU = vis_div.clientWidth;
+                // console.log("width "+ vis_div.clientWidth);
+
+                // document.getElementById("li").setAttribute("height", "" + heightLI);
+                svgLI
+                    .attr("width", widthLI)
+                    .attr("height", heightLI)
+                    .style("margin","10px")
+                ;
+                // bubble chart SVG container and axes
+                svgBU
+                    .attr("width", widthBU)
+                    .attr("height", heightBU);
+
+                xScale.range([axisSpace.right, widthLI -1]);
+                xScale2.range([axisSpace.right, widthLI -1]);
+
+                yScale.range([axisSpace.bottom, heightLI - (axisSpace.top + axisSpace.bottom)]);
+
+                xAxis = xAxis.scale(xScale);
+                yAxis = yAxis.scale(yScale);
+
+                pack.size([widthBU, heightBU]);
+                bubbleDataPack = pack(bubbleDataRoot).leaves().filter(elem => elem.depth === 3);
+
+                // console.log(heightBU);
+                line
+                    .data(dimensions)
+                    .attr("d", li);
+                liYAxis
+                    .attr("transform", "translate("+ axisSpace.right +","+0+")")
+                    .call(d3.axisLeft(yScale));
+
+                liXAxis
+                    .attr("transform", "translate(0,"+(heightLI - axisSpace.bottom)+")")
+                    .call(d3.axisBottom(xScale));
+
+                bubble.selectAll("circle")
+                    .data(bubbleDataPack)
+                    .attr("transform" , d => 'translate(' + d.x + ',' + d.y + ')');
+            }
+
+            function zoom_function() {
+                xScale = d3.event.transform.rescaleX(xScale2);
+                liXAxis.call(xAxis.scale(xScale));
+                line.attr("d", li);
+            }
+
+            // Show anonymity values in legend list and call function to create appropriate network bubble graph
+            function showAnonValues_orderBubbleGraph() {
+                let date = xScale.invert(d3.event.x);
+                if (!holdValue) {
+                    legendDiv
+                        .data(dimensions)
+                        .selectAll("label")
+                        .text(function (d) {
+                            let value = anonData.find(x => x.Date.toDateString() === date.toDateString());
+                            return d + ": " + (value ? value[d] : 0).toFixed(3);
+                        });
+                    makeBubbleGraph((date.toISOString().substr(0, 10)));
+                }
+                if (d3.event.type === "dblclick") {
+                    holdValue = !holdValue;
+                }
+            }
+
+            // Returns colors for guard, middle and exit relays.
+            function bubbleColor (d) {
+                //Colors from http://colorbrewer2.org
+                switch (d.parent.data.p) {
+                    case "m":
+                        return "#7570b3";
+                    case "g":
+                        return "#1b9e77";
+                    case "e" :
+                        return "#d95f02";
+                    default:
+                        return "black";
+                }
+            }
+
+            // Creates a network bubble graph for the specified date if the data is available. Also loads data if the date has a different year.
+            function makeBubbleGraph(dateString) {
+                if (current_date === dateString) return;
+                if (current_year !== dateString.slice(0, 4)) {
+                    networkBubbleTitle.text("Network Bubble from " + dateString);
+                    current_year = dateString.slice(0, 4);
+                    data = null;
+                    d3.json(dataLoc(), function (d) {
+                        data = d;
+                        // makeBubbleGraph(dateString);
+                    });
+                }
+                if (!data) return;
+                current_date = dateString;
+
+                // console.log(data);
+                bubbleDataPack = data.find(elem => elem.d === dateString);
+                if (bubbleDataPack) {
+                    bubbleDataRoot = d3.hierarchy(bubbleDataPack, d => d.c)
+                        .sum(function (d) {
+                            return d.b ? +d.b : 0;})
+                        .sort(function (a, b) {
+                            return b.value - a.value;
+                        })
+                    ;
+                    // Only select elements with depth of 3 -> tor nodes are at depth 3 not needed anymore
+                    bubbleDataPack = pack(bubbleDataRoot).leaves();//.filter(elem => elem.depth === 3);
+                    // console.log(bubbleDataPack);
+                    // let ips = bubbleDataPack.map(x => x.data.i);
+                    //
+                    // const count = ips =>
+                    //     ips.reduce((a, b) => ({...a, [b]: (a[b] || 0) + 1}));
+                    //
+                    // const duplicates = dict =>
+                    //     Object.keys(dict).filter((a) => dict[a] > 1);
+                    //
+                    // console.log(duplicates(count(ips))); // [ 'Nancy' ]
+
+                    networkBubbleTitle.text("Network Bubble from " + dateString + ". Number of Nodes: " + bubbleDataPack.length);
+                    // console.log(pack(root).leaves());
+                    bubble.selectAll("circle")
+                        .data(bubbleDataPack)
+                        .style("fill", bubbleColor)
+                        .attr('r', d => d.r)
+                        .attr("transform", d =>  'translate(' + d.x + ',' + d.y + ')')
+                    ;
+                    bubble.selectAll("circle")
+                        .data(bubbleDataPack)
+                        .enter()
+                        .append("circle")
+                        .style("stroke", "#4c4c4c")
+                        .style("stroke-width", "1")
+                        .style("fill", bubbleColor)
+                        .attr('r', d => d.r)
+                        .attr("transform", d =>  'translate(' + d.x + ',' + d.y + ')')
+                        .on("mouseenter", highlightDetailOn)
+                        .on("mouseleave", highlightDetailOff)
+                    ;
+                    bubble.selectAll("circle").data(bubbleDataPack).exit().remove();
+                }
+            }
+
+            // function nextBubbleGraph() {
+            //     if (!data) return;
+            //     let day_index = data.indexOf(current_date);
+            //     if (day_index !== -1) {
+            //         if (day_index !== data.length - 1) {
+            //             makeBubbleGraph(data[day_index+1]);
+            //         } else {
+            //
+            //         }
+            //     }
+            // }
+
+            // Turn on highlighting and detail div of current ip 16 group
+            function highlightDetailOn(d) {
+                console.log(d.data.i);
+                let ip16 = d.parent.parent.data.i1;
+                bubble.selectAll("circle")
+                    .filter(function (i) {
+                        return i.parent.parent.data.i1 === ip16;
+                    })
+                    .style("stroke-width", "4")
+                    .style("stroke", "black");
+                // Bandwidth is given in bytes per second
+                details = ["IP16: " + ip16, "Bw: " + (d.data.b / 1000000).toFixed(1) + "MB/s"];
+
+                detailDivBackground
+                    .style("left", (d3.event.pageX + 30) + "px")
+                    .style("top", (d3.event.pageY - 80) + "px");
+                detailDivBackground.transition()
+                    .duration(100)
+                    .style("background-color", "rgba(255, 255, 255, 0.7)")
+                    .style("border-color", "rgba(0,0,0,0.7)");
+                    // .style("left", (d3.event.pageX + 30) + "px")
+                    // .style("top", (d3.event.pageY - 80) + "px");
+                detailDivForeground.transition()
+                    .duration(100)
+                    .style("opacity", 1)
+                    ;
+                detailDivForeground
+                    .selectAll("li")
+                    .data(details)
+                    .text(String)
+                ;
+
+            }
+
+            // Turn off highlighting and detail div of current ip 16 group
+            function highlightDetailOff(d) {
+                bubble.selectAll("circle")
+                    .filter(function (i) {
+                        return i.parent.parent.data.i1 === d.parent.parent.data.i1;
+                    })
+                    .style("stroke-width", "1")
+                    .style("stroke", "#4c4c4c");
+                detailDivBackground.transition()
+                    .duration(200)
+                    .style("background-color", "rgba(255, 255, 255, 0)")
+                    .style("border-color", "rgba(0,0,0,0)")
+                    .on("end", function(){
+                        detailDivBackground
+                            .style("left", "0px")
+                            .style("top", "0px");
+                    });
+                detailDivForeground.transition()
+                    .duration(100)
+                    .style("opacity", 0);
+            }
+
+            // Blend in/out graph lines and cross out the appropriate legend entry.
+            function toggleLine(d) {
+                let contextLine = line._groups[0].find(x => x.__data__ === d);
+                let contextLegend = legendDiv._groups[0].find(x => x.__data__ === d);
+                if (lineIsVisible[d]) {
+                    d3.select(contextLine).style("opacity","0");
+                    d3.select(contextLegend).style("text-decoration", "line-through");
+                    lineIsVisible[d] = false;
+                } else {
+                    d3.select(contextLine).style("opacity","1");
+                    d3.select(contextLegend).style("text-decoration", "none");
+                    lineIsVisible[d] = true;
+                }
+            }
+
+            window.addEventListener("resize", update);
+            // window.addEventListener("keydown",)
+        })
+
+    })
+
+
+</script>
+</body>
+</html>
